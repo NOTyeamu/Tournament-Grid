@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0e0f14">
+<title>Tournament Grid</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<style>
+:root{
+  --bg:#0e0f14; --panel:#151722; --panel2:#1b1e2b; --card:#1f2230;
+  --line:#2a2e40; --txt:#e6e8f0; --dim:#8b90a6; --acc:#7b61ff;
+  --win:#7b61ff; --loss:#343850;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--txt);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif}
+.app{display:flex;min-height:100vh}
+.rail{width:64px;flex:0 0 64px;background:var(--panel);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0;position:sticky;top:0;height:100vh}
+.rail button{width:40px;height:40px;border:0;border-radius:10px;background:transparent;color:var(--dim);
+  font-size:17px;cursor:pointer;display:grid;place-items:center}
+.rail button:hover{background:var(--panel2);color:var(--txt)}
+.rail button.on{background:var(--acc);color:#fff}
+.rail .sp{flex:1}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{padding:18px 24px 0}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--dim);font-size:13px}
+.tabs{display:flex;gap:18px;padding:14px 24px 0;border-bottom:1px solid var(--line);background:var(--panel);margin-top:14px;overflow-x:auto}
+.tabs a{padding:0 2px 10px;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;font-size:13px;white-space:nowrap}
+.tabs a.on{color:var(--txt);border-color:var(--acc)}
+.body{padding:22px 24px 60px}
+.btn{background:var(--acc);border:0;color:#fff;padding:9px 14px;border-radius:8px;cursor:pointer;font-size:13px}
+.btn.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--txt)}
+.btn:hover{filter:brightness(1.1)}
+input,textarea,select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+  border-radius:8px;padding:9px 10px;font:inherit;width:100%}
+label{display:block;font-size:12px;color:var(--dim);margin:14px 0 6px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.tcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer}
+.tcard:hover{border-color:var(--acc)}
+.tcard h3{margin:0 0 4px;font-size:15px}
+.form{max-width:520px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bracket{display:flex;gap:34px;align-items:stretch;min-width:max-content;padding-bottom:8px}
+.round{display:flex;flex-direction:column;justify-content:space-around;gap:18px;min-width:220px}
+.rlabel{background:var(--panel2);border:1px solid var(--line);border-radius:8px;text-align:center;
+  padding:7px 10px;color:var(--dim);font-size:12px;margin-bottom:6px}
+.match{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.match .slot{display:flex;align-items:center;gap:8px;padding:7px 9px;border-bottom:1px solid var(--line)}
+.match .slot:last-child{border-bottom:0}
+.slot .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.slot.win{background:linear-gradient(90deg,rgba(123,97,255,.18),transparent)}
+.slot.win .nm{font-weight:600}
+.slot .sc{width:34px;flex:0 0 34px;text-align:center;padding:3px 0;border-radius:5px;background:var(--loss);border:0}
+.slot.win .sc{background:var(--win);color:#fff}
+.slot.tbd .nm{color:var(--dim)}
+.sec{margin:26px 0 10px;color:var(--dim);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);font-size:13px}
+th{color:var(--dim);font-weight:500}
+.scroll{overflow-x:auto}
+.empty{color:var(--dim);padding:20px 0}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <button data-nav="home" title="Турниры">▤</button>
+    <button data-nav="new" title="Создать турнир">＋</button>
+    <button data-nav="players" title="Участники">☺</button>
+    <button data-nav="final" title="Сетка">⚑</button>
+    <button data-nav="standings" title="Таблица">▦</button>
+    <button data-nav="log" title="Лог">☷</button>
+    <span class="sp"></span>
+    <button data-nav="export" title="Экспорт / импорт">⇄</button>
+  </aside>
+  <div class="main">
+    <div class="top" id="top"></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="body" id="view"></div>
+  </div>
+</div>
+<script>
+var KEY='bracket.v1';
+function loadDb(){try{return JSON.parse(localStorage.getItem(KEY))||{list:[]}}catch(e){return{list:[]}}}
+var db=loadDb();
+function save(){localStorage.setItem(KEY,JSON.stringify(db))}
+var S={view:'home',id:null};
+function cur(){for(var i=0;i<db.list.length;i++)if(db.list[i].id===S.id)return db.list[i];return null}
+function uid(){return Math.random().toString(36).slice(2,9)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+
+/* ---------- построение сетки ---------- */
+function seedOrder(n){var a=[0];for(var s=1;s<n;s*=2){var b=[];for(var i=0;i<a.length;i++){b.push(a[i]);b.push(s*2-1-a[i])}a=b}return a}
+function build(t){
+  var p=t.players.length;
+  var size=Math.max(2,Math.pow(2,Math.ceil(Math.log(Math.max(2,p))/Math.LN2)));
+  var n=Math.round(Math.log(size)/Math.LN2), W=[], L=[], all=[];
+  function mk(bracket,round,idx,a,b){var m={id:bracket+round+'-'+idx,bracket:bracket,round:round,idx:idx,a:a,b:b};all.push(m);return m}
+  var ord=seedOrder(size), i, r, k;
+  W[0]=[];for(i=0;i<size/2;i++)W[0].push(mk('W',0,i,{seed:ord[i*2]},{seed:ord[i*2+1]}));
+  for(r=1;r<n;r++){W[r]=[];for(i=0;i<size/Math.pow(2,r+1);i++)W[r].push(mk('W',r,i,{w:W[r-1][i*2].id},{w:W[r-1][i*2+1].id}))}
+  if(t.format==='double'&&size>=4){
+    var li=0, L0=[];
+    for(i=0;i<size/4;i++)L0.push(mk('L',li,i,{l:W[0][i*2].id},{l:W[0][i*2+1].id}));
+    L.push(L0);li++;
+    for(k=1;k<n;k++){
+      var prev=L[L.length-1];
+      if(k>1){var mn=[];for(i=0;i<prev.length/2;i++)mn.push(mk('L',li,i,{w:prev[i*2].id},{w:prev[i*2+1].id}));L.push(mn);li++}
+      var src=L[L.length-1], mj=[];
+      for(i=0;i<W[k].length;i++)mj.push(mk('L',li,i,{w:src[i].id},{l:W[k][i].id}));
+      L.push(mj);li++;
+    }
+  }
+  var gf=mk('GF',0,0,{w:W[n-1][0].id},L.length?{w:L[L.length-1][0].id}:{seed:null});
+  return {size:size,n:n,W:W,L:L,gf:gf,all:all};
+}
+function solve(t){
+  var B=build(t), out={}, res=t.results||{};
+  function val(s){
+    if(!s)return null;
+    if('seed'in s)return t.players[s.seed]||null;
+    if(s.w)return out[s.w]?out[s.w].winner:null;
+    return out[s.l]?out[s.l].loser:null;
+  }
+  for(var i=0;i<B.all.length;i++){
+    var m=B.all[i], a=val(m.a), b=val(m.b), r=res[m.id]||{};
+    m.pa=a;m.pb=b;m.sa=r.sa;m.sb=r.sb;
+    var winner=null,loser=null;
+    if(a&&!b){winner=a}
+    else if(b&&!a){winner=b}
+    else if(a&&b&&r.sa!=null&&r.sb!=null&&r.sa!==r.sb){
+      winner=r.sa>r.sb?a:b; loser=r.sa>r.sb?b:a;
+    }
+    out[m.id]={winner:winner,loser:loser};m.winner=winner;
+  }
+  return B;
+}
+
+/* ---------- рендер ---------- */
+var TABS=[['overview','Overview'],['players','Participants'],['final','Final Stage'],['matches','Matches'],['standings','Standings'],['log','Log']];
+function render(){
+  var t=cur(), rail=document.querySelectorAll('.rail button');
+  for(var i=0;i<rail.length;i++)rail[i].className=(rail[i].getAttribute('data-nav')===S.view?'on':'');
+  var top=document.getElementById('top'), tabs=document.getElementById('tabs'), v=document.getElementById('view');
+  if(!t||S.view==='home'||S.view==='new'||S.view==='export'){
+    top.innerHTML='<h1>'+(S.view==='new'?'Новый турнир':S.view==='export'?'Экспорт / импорт':'Мои турниры')+
+      '</h1><div class="sub">Всё хранится только в вашем браузере</div>';
+    tabs.innerHTML='';
+    v.innerHTML=S.view==='new'?formHTML():S.view==='export'?ioHTML():homeHTML();
+    return;
+  }
+  top.innerHTML='<h1>'+esc(t.name)+'</h1><div class="sub">'+esc(t.date||'')+' · '+(t.format==='double'?'Double':'Single')+
+    ' Elimination · Bo'+t.bo+' · '+t.players.length+' участников</div>';
+  var h='';
+  for(var j=0;j<TABS.length;j++)h+='<a data-tab="'+TABS[j][0]+'" class="'+(S.view===TABS[j][0]?'on':'')+'">'+TABS[j][1]+'</a>';
+  tabs.innerHTML=h;
+  var B=solve(t);
+  v.innerHTML=S.view==='overview'?overviewHTML(t,B):S.view==='players'?playersHTML(t):
+    S.view==='matches'?matchesHTML(t,B):S.view==='standings'?standingsHTML(t,B):
+    S.view==='log'?logHTML(t):bracketHTML(t,B);
+}
+function homeHTML(){
+  if(!db.list.length)return '<div class="empty">Турниров пока нет.</div><button class="btn" data-act="new">Создать турнир</button>';
+  var h='<div style="margin-bottom:16px"><button class="btn" data-act="new">Создать турнир</button></div><div class="grid">';
+  for(var i=0;i<db.list.length;i++){var t=db.list[i];
+    h+='<div class="tcard" data-open="'+t.id+'"><h3>'+esc(t.name)+'</h3><div class="sub">'+esc(t.date||'')+' · '+
+      t.players.length+' участников · Bo'+t.bo+'</div></div>';}
+  return h+'</div>';
+}
+function formHTML(){
+  return '<div class="form"><label>Название турнира</label><input id="f-name" placeholder="Spring Championship">'+
+  '<label>Дата / раунд</label><input id="f-date" placeholder="April 2026">'+
+  '<label>Формат</label><select id="f-fmt"><option value="single">Single Elimination</option><option value="double" selected>Double Elimination</option></select>'+
+  '<label>Матчи до</label><select id="f-bo"><option>1</option><option selected>3</option><option>5</option></select>'+
+  '<label>Участники — по одному в строке (сеяные сверху)</label>'+
+  '<textarea id="f-pl" rows="8" placeholder="100 Thieves&#10;Team Secret&#10;Newbee&#10;Evil Geniuses"></textarea>'+
+  '<div class="row" style="margin-top:16px"><button class="btn" data-act="create">Создать сетку</button>'+
+  '<button class="btn ghost" data-act="home">Отмена</button></div></div>';
+}
+function ioHTML(){
+  return '<div class="form"><label>JSON всех турниров (бэкап / перенос)</label><textarea id="io" rows="12">'+
+  esc(JSON.stringify(db,null,2))+'</textarea><div class="row" style="margin-top:14px">'+
+  '<button class="btn" data-act="import">Импортировать</button>'+
+  '<button class="btn ghost" data-act="home">Назад</button></div></div>';
+}
+function playersHTML(t){
+  return '<div class="form"><label>Участники (по одному в строке)</label><textarea id="p-list" rows="10">'+
+  esc(t.players.join('\n'))+'</textarea><div class="row" style="margin-top:14px">'+
+  '<button class="btn" data-act="savePlayers">Сохранить</button>'+
+  '<button class="btn ghost" data-act="reset">Сбросить результаты</button>'+
+  '<button class="btn ghost" data-act="del">Удалить турнир</button></div></div>';
+}
+function overviewHTML(t,B){
+  var played=0;
+  for(var i=0;i<B.all.length;i++)if(B.all[i].winner&&B.all[i].pa&&B.all[i].pb)played++;
+  return '<div class="grid"><div class="tcard"><h3>Чемпион</h3><div class="sub">'+(B.gf.winner?esc(B.gf.winner):'ещё не определён')+'</div></div>'+
+  '<div class="tcard"><h3>Матчей всего</h3><div class="sub">'+B.all.length+'</div></div>'+
+  '<div class="tcard"><h3>Сыграно</h3><div class="sub">'+played+'</div></div></div>'+
+  '<div class="sec">Как поделиться</div>'+
+  '<div class="sub">Скопируйте JSON на вкладке ⇄ и передайте его — другой человек импортирует вашу сетку у себя в браузере.</div>';
+}
+function slotHTML(m,side){
+  var p=side==='a'?m.pa:m.pb, sc=side==='a'?m.sa:m.sb;
+  var win=m.winner&&p&&m.winner===p;
+  return '<div class="slot'+(win?' win':'')+(p?'':' tbd')+'"><span class="nm">'+esc(p||'TBD')+'</span>'+
+    '<input class="sc" data-m="'+m.id+'" data-s="'+side+'" value="'+(sc==null?'':sc)+'" inputmode="numeric"></div>';
+}
+function matchHTML(m){return '<div class="match">'+slotHTML(m,'a')+slotHTML(m,'b')+'</div>'}
+function colHTML(label,ms){
+  var h='<div class="round"><div class="rlabel">'+label+'</div>';
+  for(var i=0;i<ms.length;i++)h+=matchHTML(ms[i]);
+  return h+'</div>';
+}
+function bracketHTML(t,B){
+  var bo='(Bo'+t.bo+')', h='<div class="sec">Upper bracket</div><div class="scroll"><div class="bracket">', r;
+  for(r=0;r<B.W.length;r++)h+=colHTML((r===B.W.length-1?'Upper Bracket Final ':'Upper Bracket R'+(r+1)+' ')+bo,B.W[r]);
+  h+=colHTML('Grand Final '+bo,[B.gf])+'</div></div>';
+  if(B.L.length){
+    h+='<div class="sec">Lower bracket</div><div class="scroll"><div class="bracket">';
+    for(r=0;r<B.L.length;r++)h+=colHTML((r===B.L.length-1?'Lower Bracket Final ':'Lower Bracket R'+(r+1)+' ')+bo,B.L[r]);
+    h+='</div></div>';
+  }
+  return h;
+}
+function matchesHTML(t,B){
+  var h='<div class="scroll"><table><tr><th>#</th><th>Стадия</th><th>Матч</th><th>Счёт</th></tr>';
+  for(var i=0;i<B.all.length;i++){var m=B.all[i];
+    h+='<tr><td>'+(i+1)+'</td><td>'+m.bracket+(m.round+1)+'</td><td>'+esc(m.pa||'TBD')+' — '+esc(m.pb||'TBD')+
+      '</td><td>'+(m.sa==null?'-':m.sa)+':'+(m.sb==null?'-':m.sb)+'</td></tr>';}
+  return h+'</table></div>';
+}
+function standingsHTML(t,B){
+  var st={},i;
+  for(i=0;i<t.players.length;i++)st[t.players[i]]={w:0,l:0};
+  for(i=0;i<B.all.length;i++){var m=B.all[i];
+    if(m.winner&&m.pa&&m.pb&&m.sa!=null&&m.sb!=null){
+      var lo=m.winner===m.pa?m.pb:m.pa;
+      if(st[m.winner])st[m.winner].w++;
+      if(st[lo])st[lo].l++;
+    }}
+  var rows=Object.keys(st).map(function(k){return [k,st[k]]}).sort(function(a,b){return b[1].w-a[1].w||a[1].l-b[1].l});
+  var h='<table><tr><th>#</th><th>Участник</th><th>W</th><th>L</th></tr>';
+  for(i=0;i<rows.length;i++)h+='<tr><td>'+(i+1)+'</td><td>'+esc(rows[i][0])+'</td><td>'+rows[i][1].w+'</td><td>'+rows[i][1].l+'</td></tr>';
+  return h+'</table>';
+}
+function logHTML(t){
+  var l=(t.log||[]).slice().reverse();
+  if(!l.length)return '<div class="empty">Пока пусто.</div>';
+  var h='<table><tr><th>Время</th><th>Событие</th></tr>';
+  for(var i=0;i<l.length;i++)h+='<tr><td>'+esc(l[i].at)+'</td><td>'+esc(l[i].msg)+'</td></tr>';
+  return h+'</table>';
+}
+function addLog(t,msg){t.log=t.log||[];t.log.push({at:new Date().toLocaleString(),msg:msg});if(t.log.length>200)t.log.shift()}
+
+/* ---------- события ---------- */
+document.addEventListener('click',function(e){
+  var nav=e.target.closest('[data-nav]'), tab=e.target.closest('[data-tab]'),
+      open=e.target.closest('[data-open]'), act=e.target.closest('[data-act]');
+  if(nav){var k=nav.getAttribute('data-nav');S.view=(k==='home'||k==='new'||k==='export')?k:(S.id?k:'home');return render()}
+  if(tab){S.view=tab.getAttribute('data-tab');return render()}
+  if(open){S.id=open.getAttribute('data-open');S.view='final';return render()}
+  if(!act)return;
+  var a=act.getAttribute('data-act'), t=cur();
+  if(a==='new'){S.view='new';return render()}
+  if(a==='home'){S.view='home';return render()}
+  if(a==='create'){
+    var players=document.getElementById('f-pl').value.split('\n').map(function(s){return s.trim()}).filter(Boolean);
+    if(players.length<2){alert('Нужно минимум 2 участника');return}
+    var t2={id:uid(),name:document.getElementById('f-name').value.trim()||'Турнир',
+      date:document.getElementById('f-date').value.trim(),
+      format:document.getElementById('f-fmt').value,
+      bo:+document.getElementById('f-bo').value,
+      players:players,results:{},log:[]};
+    addLog(t2,'Турнир создан');db.list.push(t2);save();S.id=t2.id;S.view='final';return render();
+  }
+  if(a==='import'){
+    try{var d=JSON.parse(document.getElementById('io').value);if(!d.list)throw 0;db=d;save();S.view='home';render()}
+    catch(err){alert('Некорректный JSON')}
+    return;
+  }
+  if(!t)return;
+  if(a==='savePlayers'){
+    t.players=document.getElementById('p-list').value.split('\n').map(function(s){return s.trim()}).filter(Boolean);
+    addLog(t,'Список участников обновлён');save();S.view='final';return render();
+  }
+  if(a==='reset'){if(confirm('Сбросить все результаты?')){t.results={};addLog(t,'Результаты сброшены');save();render()}return}
+  if(a==='del'){if(confirm('Удалить турнир «'+t.name+'»?')){db.list=db.list.filter(function(x){return x.id!==t.id});save();S.id=null;S.view='home';render()}return}
+});
+document.addEventListener('change',function(e){
+  var i=e.target.closest('.sc');if(!i)return;
+  var t=cur();if(!t)return;
+  var id=i.getAttribute('data-m'), s=i.getAttribute('data-s'), v=i.value.trim();
+  t.results=t.results||{};t.results[id]=t.results[id]||{};
+  t.results[id][s==='a'?'sa':'sb']=v===''?null:Math.max(0,parseInt(v,10)||0);
+  addLog(t,'Счёт матча '+id+' обновлён');save();render();
+});
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('./sw.js')['catch'](function(){})})}
+render();
+</script>
+</body>
+</html>
