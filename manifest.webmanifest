@@ -1,9 +1,10 @@
 {
   "name": "Tournament Grid",
-  "short_name": "Brackets",
+  "short_name": "Bracket",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0e0f14",
-  "theme_color": "#0e0f14"
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#000000"
 }
