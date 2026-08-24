@@ -1,4 +1,4 @@
-var CACHE='tournament-grid-v1';
+var CACHE='tournament-grid-v3';
 var ASSETS=['./','./index.html','./manifest.webmanifest'];
 self.addEventListener('install',function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(ASSETS)}).then(function(){return self.skipWaiting()}));
@@ -9,13 +9,18 @@ self.addEventListener('activate',function(e){
   }).then(function(){return self.clients.claim()}));
 });
 self.addEventListener('fetch',function(e){
-  if(e.request.method!=='GET')return;
-  e.respondWith(caches.match(e.request).then(function(hit){
+  var req=e.request;
+  if(req.method!=='GET')return;
+  if(req.mode==='navigate'){
+    e.respondWith(fetch(req).then(function(r){
+      var copy=r.clone();caches.open(CACHE).then(function(c){c.put('./index.html',copy)});return r;
+    })['catch'](function(){return caches.match('./index.html')}));
+    return;
+  }
+  e.respondWith(caches.match(req).then(function(hit){
     if(hit)return hit;
-    return fetch(e.request).then(function(r){
-      var copy=r.clone();
-      caches.open(CACHE).then(function(c){c.put(e.request,copy)});
-      return r;
+    return fetch(req).then(function(r){
+      var copy=r.clone();caches.open(CACHE).then(function(c){c.put(req,copy)});return r;
     })['catch'](function(){return caches.match('./index.html')});
   }));
 });
